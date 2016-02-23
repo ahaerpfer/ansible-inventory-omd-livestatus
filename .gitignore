@@ -1,0 +1,17 @@
+## Generic files to ignore
+*~
+*.DS_Store
+
+## Emacs auto-save and locks
+\#*\#
+.\#*
+
+## Python ignores
+*.pyc
+*.pyo
+*.mo
+*.egg-info
+*.egg
+*.EGG
+*.EGG-INFO
+
