@@ -110,8 +110,8 @@ class OMDLivestatusInventory(object):
                 else:
                     inventory[group] = [host['ip']]
             hostvars[host['ip']] = {
-                'name': host['name'],
-                'alias': host['alias'],
+                'omd_name': host['name'],
+                'omd_alias': host['alias'],
             }
         self.inventory = inventory
         self.inventory['_meta'] = {
