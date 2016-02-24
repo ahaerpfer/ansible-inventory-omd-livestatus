@@ -73,14 +73,18 @@ class OMDLivestatusInventory(object):
         
     def _read_cli_args(self):
         parser = optparse.OptionParser()
-        parser.add_option('--list', action='store_true', 
-                          dest='list', default=False)
-        parser.add_option('--host', type='string',
-                          dest='host', default=None)
-        parser.add_option('--socket', type='string',
-                          dest='socket', default=None)
-        parser.add_option('--to-static', action='store_true',
-                          dest='static', default=False)
+        parser.add_option(
+            '--list', action='store_true', dest='list', default=False,
+            help='Return full Ansible inventory as JSON (default action).')
+        parser.add_option(
+            '--host', type='string', dest='host', default=None,
+            help='Return Ansible hostvars as JSON.')
+        parser.add_option(
+            '--socket', type='string', dest='socket', default=None,
+            help='Set path to Livestatus socket.')
+        parser.add_option(
+            '--to-static', action='store_true', dest='static', default=False,
+            help='Print inventory in static file format to stdout.')
         self.opts, _ = parser.parse_args()
 
         # Make --list default if no other command is specified.
