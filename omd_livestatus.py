@@ -54,8 +54,10 @@ class OMDLivestatusInventory(object):
 
         self.load_from_omd()
         self.build_inventory_by_ip()
-        
-        if self.opts.list:
+
+        if self.opts.static:
+            self.print_static_inventory()
+        elif self.opts.list:
             print(json.dumps(self.inventory, indent=4))
         elif self.opts.host:
             if self.opts.host in self.inventory['_meta']['hostvars']:
@@ -77,6 +79,8 @@ class OMDLivestatusInventory(object):
                           dest='host', default=None)
         parser.add_option('--socket', type='string',
                           dest='socket', default=None)
+        parser.add_option('--to-static', action='store_true',
+                          dest='static', default=False)
         self.opts, _ = parser.parse_args()
 
         # Make --list default if no other command is specified.
@@ -117,6 +121,16 @@ class OMDLivestatusInventory(object):
         self.inventory['_meta'] = {
             'hostvars': hostvars
         }
+
+    def print_static_inventory(self):
+        for group in [k for k in self.inventory.keys() if k != '_meta']:
+            print('\n[{0}]'.format(group))
+            for host in self.inventory[group]:
+                vars = self.inventory['_meta']['hostvars'][host]
+                hostvars = []
+                for varname in vars.keys():
+                    hostvars.append('{0}="{1}"'.format(varname, vars[varname]))
+                print('{0}\t{1}'.format(host, ' '.join(hostvars)))
 
 
 if __name__ == '__main__':
