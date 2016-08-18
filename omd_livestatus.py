@@ -24,9 +24,10 @@ https://github.com/ansible/ansible/blob/devel/contrib/inventory/digital_ocean.py
 :author: Andreas Härpfer <andreas.haerpfer@consol.de>
 """
 
+from __future__ import print_function
+
 __version__ = '0.1'
 
-from __future__ import print_function
 import os
 import sys
 import optparse                         # Legacy ... 2.6 still out there
