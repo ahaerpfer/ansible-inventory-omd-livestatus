@@ -24,6 +24,8 @@ https://github.com/ansible/ansible/blob/devel/contrib/inventory/digital_ocean.py
 :author: Andreas Härpfer <andreas.haerpfer@consol.de>
 """
 
+__version__ = '0.1'
+
 from __future__ import print_function
 import os
 import sys
@@ -35,8 +37,26 @@ try:
 except ImportError:
     import simplejson as json
 
+try:
+    maketrans = str.maketrans           # Python 3
+except AttributeError:
+    from string import maketrans        # Python 2
+
 
 class OMDLivestatusInventory(object):
+
+    #: string of bad characters in host or group names
+    _bad_chars = '.,;:[] '
+
+    #: replacement char for bad chars
+    _replacement_char = '_'
+
+    #: translation table for sanitizing group names
+    _trans_table = maketrans(_bad_chars, _replacement_char * len(_bad_chars))
+
+    # For Python 3 alternatively:
+    #_trans_table = dict(zip(map(ord, _bad_chars),
+    #                        _replacement_char * len(_bad_chars)))
 
     def __init__(self):
         self.data = {}
@@ -92,6 +112,9 @@ class OMDLivestatusInventory(object):
             self.opts.list = True
 
     def load_from_omd(self):
+        """Read data from livestatus socket and populate self.data['hosts'].
+
+        """
         self.data['hosts'] = []
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.connect(self.opts.socket)
@@ -109,14 +132,22 @@ class OMDLivestatusInventory(object):
             })
 
     def build_inventory_by_ip(self):
+        """Wrap OMD data into an Ansible compatible inventory data structure.
+
+        Hosts are identified by IP, group names are sanitized to not
+        contain characters that Ansible can't digest.  In particular
+        group names in Ansible must not contain blanks!
+
+        """
         inventory = {}
         hostvars = {}
         for host in self.data['hosts']:
             for group in host['groups'] or ['_NOGROUP']:
-                if group in inventory:
-                    inventory[group].append(host['ip'])
+                sanitized_group = group.translate(self._trans_table)
+                if sanitized_group in inventory:
+                    inventory[sanitized_group].append(host['ip'])
                 else:
-                    inventory[group] = [host['ip']]
+                    inventory[sanitized_group] = [host['ip']]
             hostvars[host['ip']] = {
                 'omd_name': host['name'],
                 'omd_alias': host['alias'],
@@ -127,6 +158,9 @@ class OMDLivestatusInventory(object):
         }
 
     def print_static_inventory(self):
+        """Print out data in a format that can be used as a static inventory.
+
+        """
         for group in [k for k in self.inventory.keys() if k != '_meta']:
             print('\n[{0}]'.format(group))
             for host in self.inventory[group]:
