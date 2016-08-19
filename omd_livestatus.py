@@ -74,10 +74,10 @@ class OMDLivestatusInventory(object):
                 sys.exit(1)
 
         self.load_from_omd()
-        if self.opts.by_name:
-            self.build_inventory_by_name()
-        else:
+        if self.opts.by_ip:
             self.build_inventory_by_ip()
+        else:
+            self.build_inventory_by_name()
 
         if self.opts.static:
             self.print_static_inventory()
@@ -107,8 +107,8 @@ class OMDLivestatusInventory(object):
             '--socket', type='string', dest='socket', default=None,
             help='Set path to Livestatus socket.')
         parser.add_option(
-            '--by-name', action='store_true', dest='by_name', default=False,
-            help='Create inventory by name (instead of the default by IP).')
+            '--by-ip', action='store_true', dest='by_ip', default=False,
+            help='Create inventory by IP (instead of the default by name).')
         parser.add_option(
             '--to-static', action='store_true', dest='static', default=False,
             help='Print inventory in static file format to stdout.')
