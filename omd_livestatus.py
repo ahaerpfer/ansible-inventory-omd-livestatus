@@ -74,7 +74,10 @@ class OMDLivestatusInventory(object):
                 sys.exit(1)
 
         self.load_from_omd()
-        self.build_inventory_by_ip()
+        if self.opts.by_name:
+            self.build_inventory_by_name()
+        else:
+            self.build_inventory_by_ip()
 
         if self.opts.static:
             self.print_static_inventory()
@@ -103,6 +106,9 @@ class OMDLivestatusInventory(object):
         parser.add_option(
             '--socket', type='string', dest='socket', default=None,
             help='Set path to Livestatus socket.')
+        parser.add_option(
+            '--by-name', action='store_true', dest='by_name', default=False,
+            help='Create inventory by name (instead of the default by IP).')
         parser.add_option(
             '--to-static', action='store_true', dest='static', default=False,
             help='Print inventory in static file format to stdout.')
@@ -151,6 +157,28 @@ class OMDLivestatusInventory(object):
                     inventory[sanitized_group] = [host['ip']]
             hostvars[host['ip']] = {
                 'omd_name': host['name'],
+                'omd_alias': host['alias'],
+            }
+        self.inventory = inventory
+        self.inventory['_meta'] = {
+            'hostvars': hostvars
+        }
+
+    def build_inventory_by_name(self):
+        """Create Ansible inventory by OMD name instead of by IP.
+
+        """
+        inventory = {}
+        hostvars = {}
+        for host in self.data['hosts']:
+            for group in host['groups'] or ['_NOGROUP']:
+                sanitized_group = group.translate(self._trans_table)
+                if sanitized_group in inventory:
+                    inventory[sanitized_group].append(host['name'])
+                else:
+                    inventory[sanitized_group] = [host['name']]
+            hostvars[host['name']] = {
+                'ansible_host': host['ip'],
                 'omd_alias': host['alias'],
             }
         self.inventory = inventory
