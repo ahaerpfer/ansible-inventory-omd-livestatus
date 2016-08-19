@@ -110,7 +110,7 @@ class OMDLivestatusInventory(object):
             '--by-ip', action='store_true', dest='by_ip', default=False,
             help='Create inventory by IP (instead of the default by name).')
         parser.add_option(
-            '--to-static', action='store_true', dest='static', default=False,
+            '--static', action='store_true', dest='static', default=False,
             help='Print inventory in static file format to stdout.')
         self.opts, _ = parser.parse_args()
 
@@ -155,10 +155,18 @@ class OMDLivestatusInventory(object):
                     inventory[sanitized_group].append(host['ip'])
                 else:
                     inventory[sanitized_group] = [host['ip']]
-            hostvars[host['ip']] = {
-                'omd_name': host['name'],
-                'omd_alias': host['alias'],
-            }
+            # Detect duplicate IPs in inventory.  Keep first occurence
+            # in hostvars instead of overwriting with later data.
+            ip = host['ip']
+            if ip in hostvars:
+                if self.opts.static:
+                    print('Warning: duplicate IP {0}'.format(ip),
+                          file=sys.stderr)
+            else:
+                hostvars[ip] = {
+                    'omd_name': host['name'],
+                    'omd_alias': host['alias'],
+                }
         self.inventory = inventory
         self.inventory['_meta'] = {
             'hostvars': hostvars
