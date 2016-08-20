@@ -26,7 +26,7 @@ https://github.com/ansible/ansible/blob/devel/contrib/inventory/digital_ocean.py
 
 from __future__ import print_function
 
-__version__ = '0.1'
+__version__ = '0.2'
 
 import os
 import sys
@@ -74,7 +74,10 @@ class OMDLivestatusInventory(object):
                 sys.exit(1)
 
         self.load_from_omd()
-        self.build_inventory_by_ip()
+        if self.opts.by_ip:
+            self.build_inventory_by_ip()
+        else:
+            self.build_inventory_by_name()
 
         if self.opts.static:
             self.print_static_inventory()
@@ -104,7 +107,10 @@ class OMDLivestatusInventory(object):
             '--socket', type='string', dest='socket', default=None,
             help='Set path to Livestatus socket.')
         parser.add_option(
-            '--to-static', action='store_true', dest='static', default=False,
+            '--by-ip', action='store_true', dest='by_ip', default=False,
+            help='Create inventory by IP (instead of the default by name).')
+        parser.add_option(
+            '--static', action='store_true', dest='static', default=False,
             help='Print inventory in static file format to stdout.')
         self.opts, _ = parser.parse_args()
 
@@ -113,7 +119,9 @@ class OMDLivestatusInventory(object):
             self.opts.list = True
 
     def load_from_omd(self):
-        """Read data from livestatus socket and populate self.data['hosts'].
+        """Read host data from livestatus socket.
+
+        Populates self.data['hosts'].
 
         """
         self.data['hosts'] = []
@@ -133,11 +141,18 @@ class OMDLivestatusInventory(object):
             })
 
     def build_inventory_by_ip(self):
-        """Wrap OMD data into an Ansible compatible inventory data structure.
+        """Create Ansible inventory by IP address instead of by name.
 
-        Hosts are identified by IP, group names are sanitized to not
-        contain characters that Ansible can't digest.  In particular
-        group names in Ansible must not contain blanks!
+        Cave: contrary to hostnames IP addresses are not guaranteed to
+        be unique in OMD!  Since there is only one set of hostvars for a
+        given IP, duplicate IPs might mean that you are loosing data.
+        When creating static inventory output we issue a warning for
+        duplicate IPs.  For the default JSON output this warning is
+        suppressed since Ansible discards any output on STDERR.
+
+        Group names are sanitized to not contain characters that Ansible
+        can't digest.  In particular group names in Ansible must not
+        contain blanks!
 
         """
         inventory = {}
@@ -149,8 +164,42 @@ class OMDLivestatusInventory(object):
                     inventory[sanitized_group].append(host['ip'])
                 else:
                     inventory[sanitized_group] = [host['ip']]
-            hostvars[host['ip']] = {
-                'omd_name': host['name'],
+            # Detect duplicate IPs in inventory.  Keep first occurence
+            # in hostvars instead of overwriting with later data.
+            ip = host['ip']
+            if ip in hostvars:
+                if self.opts.static:
+                    print('Warning: duplicate IP {0}'.format(ip),
+                          file=sys.stderr)
+            else:
+                hostvars[ip] = {
+                    'omd_name': host['name'],
+                    'omd_alias': host['alias'],
+                }
+        self.inventory = inventory
+        self.inventory['_meta'] = {
+            'hostvars': hostvars
+        }
+
+    def build_inventory_by_name(self):
+        """Create Ansible inventory by OMD name.
+
+        Group names are sanitized to not contain characters that Ansible
+        can't digest.  In particular group names in Ansible must not
+        contain blanks!
+
+        """
+        inventory = {}
+        hostvars = {}
+        for host in self.data['hosts']:
+            for group in host['groups'] or ['_NOGROUP']:
+                sanitized_group = group.translate(self._trans_table)
+                if sanitized_group in inventory:
+                    inventory[sanitized_group].append(host['name'])
+                else:
+                    inventory[sanitized_group] = [host['name']]
+            hostvars[host['name']] = {
+                'ansible_host': host['ip'],
                 'omd_alias': host['alias'],
             }
         self.inventory = inventory
