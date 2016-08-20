@@ -26,7 +26,7 @@ https://github.com/ansible/ansible/blob/devel/contrib/inventory/digital_ocean.py
 
 from __future__ import print_function
 
-__version__ = '0.1'
+__version__ = '0.2'
 
 import os
 import sys
@@ -119,7 +119,9 @@ class OMDLivestatusInventory(object):
             self.opts.list = True
 
     def load_from_omd(self):
-        """Read data from livestatus socket and populate self.data['hosts'].
+        """Read host data from livestatus socket.
+
+        Populates self.data['hosts'].
 
         """
         self.data['hosts'] = []
@@ -139,11 +141,18 @@ class OMDLivestatusInventory(object):
             })
 
     def build_inventory_by_ip(self):
-        """Wrap OMD data into an Ansible compatible inventory data structure.
+        """Create Ansible inventory by IP address instead of by name.
 
-        Hosts are identified by IP, group names are sanitized to not
-        contain characters that Ansible can't digest.  In particular
-        group names in Ansible must not contain blanks!
+        Cave: contrary to hostnames IP addresses are not guaranteed to
+        be unique in OMD!  Since there is only one set of hostvars for a
+        given IP, duplicate IPs might mean that you are loosing data.
+        When creating static inventory output we issue a warning for
+        duplicate IPs.  For the default JSON output this warning is
+        suppressed since Ansible discards any output on STDERR.
+
+        Group names are sanitized to not contain characters that Ansible
+        can't digest.  In particular group names in Ansible must not
+        contain blanks!
 
         """
         inventory = {}
@@ -173,7 +182,11 @@ class OMDLivestatusInventory(object):
         }
 
     def build_inventory_by_name(self):
-        """Create Ansible inventory by OMD name instead of by IP.
+        """Create Ansible inventory by OMD name.
+
+        Group names are sanitized to not contain characters that Ansible
+        can't digest.  In particular group names in Ansible must not
+        contain blanks!
 
         """
         inventory = {}
