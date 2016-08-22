@@ -199,22 +199,30 @@ class OMDLivestatusInventory(object):
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = optparse.OptionParser()
-    parser.add_option(
+    parser = optparse.OptionParser(version='%prog {0}'.format(__version__))
+    output_group = optparse.OptionGroup(parser, 'Output formats')
+    output_group.add_option(
         '--list', action='store_true', dest='list', default=False,
         help='Return full Ansible inventory as JSON (default action).')
-    parser.add_option(
+    output_group.add_option(
         '--host', type='string', dest='host', default=None,
-        help='Return Ansible hostvars as JSON.')
-    parser.add_option(
-        '--socket', type='string', dest='socket', default=None,
-        help='Set path to Livestatus socket.')
-    parser.add_option(
-        '--by-ip', action='store_true', dest='by_ip', default=False,
-        help='Create inventory by IP (instead of the default by name).')
-    parser.add_option(
+        help='Return Ansible hostvars for HOST as JSON.')
+    output_group.add_option(
         '--static', action='store_true', dest='static', default=False,
         help='Print inventory in static file format to stdout.')
+    output_group.add_option(
+        '--by-ip', action='store_true', dest='by_ip', default=False,
+        help='Create inventory by IP (instead of the default by name).')
+    parser.add_option_group(output_group)
+
+    connect_group = optparse.OptionGroup(parser, 'Connection options')
+    connect_group.add_option(
+        '--socket', type='string', dest='socket', default=None,
+        help=('Set path to Livestatus socket.  If omitted, try to use '
+              '$OMD_LIVESTATUS_SOCKET or $OMD_ROOT/tmp/run/live.'
+        ))
+    parser.add_option_group(connect_group)
+
     return parser.parse_args()
 
 
