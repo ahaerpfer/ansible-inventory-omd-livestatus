@@ -59,64 +59,26 @@ class OMDLivestatusInventory(object):
     #_trans_table = dict(zip(map(ord, _bad_chars),
     #                        _replacement_char * len(_bad_chars)))
 
-    def __init__(self):
+    def __init__(self, location=None, method='socket', by_ip=False):
         self.data = {}
         self.inventory = {}
 
-        self._read_cli_args()
-        if not self.opts.socket:
+        if not location:
             if 'OMD_LIVESTATUS_SOCKET' in os.environ:
-                self.opts.socket = os.environ['OMD_LIVESTATUS_SOCKET']
+                self.location = os.environ['OMD_LIVESTATUS_SOCKET']
             elif 'OMD_ROOT' in os.environ:
-                self.opts.socket = os.environ['OMD_ROOT'] + '/tmp/run/live'
+                self.location = os.environ['OMD_ROOT'] + '/tmp/run/live'
             else:
-                print('Unable to determine Livestatus socket.')
-                sys.exit(1)
+                raise EnvironmentError(
+                    'Unable to determine location of Livestatus socket.')
+        else:
+            self.location = location
 
         self.load_from_omd()
-        if self.opts.by_ip:
+        if by_ip:
             self.build_inventory_by_ip()
         else:
             self.build_inventory_by_name()
-
-        if self.opts.static:
-            self.print_static_inventory()
-        elif self.opts.list:
-            print(json.dumps(self.inventory, indent=4))
-        elif self.opts.host:
-            if self.opts.host in self.inventory['_meta']['hostvars']:
-                print(json.dumps(
-                    self.inventory['_meta']['hostvars'][self.opts.host],
-                    indent=4
-                ))
-            else:
-                print("{}")
-        else:
-            print('Missing command.')
-            sys.exit(1)
-        
-    def _read_cli_args(self):
-        parser = optparse.OptionParser()
-        parser.add_option(
-            '--list', action='store_true', dest='list', default=False,
-            help='Return full Ansible inventory as JSON (default action).')
-        parser.add_option(
-            '--host', type='string', dest='host', default=None,
-            help='Return Ansible hostvars as JSON.')
-        parser.add_option(
-            '--socket', type='string', dest='socket', default=None,
-            help='Set path to Livestatus socket.')
-        parser.add_option(
-            '--by-ip', action='store_true', dest='by_ip', default=False,
-            help='Create inventory by IP (instead of the default by name).')
-        parser.add_option(
-            '--static', action='store_true', dest='static', default=False,
-            help='Print inventory in static file format to stdout.')
-        self.opts, _ = parser.parse_args()
-
-        # Make --list default if no other command is specified.
-        if not self.opts.host:
-            self.opts.list = True
 
     def load_from_omd(self):
         """Read host data from livestatus socket.
@@ -126,7 +88,7 @@ class OMDLivestatusInventory(object):
         """
         self.data['hosts'] = []
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.connect(self.opts.socket)
+        s.connect(self.location)
         s.send('GET hosts\nColumns: address name alias groups\n')
         s.shutdown(socket.SHUT_WR)
         answer = s.recv(100000000)
@@ -167,15 +129,14 @@ class OMDLivestatusInventory(object):
             # Detect duplicate IPs in inventory.  Keep first occurence
             # in hostvars instead of overwriting with later data.
             ip = host['ip']
-            if ip in hostvars:
-                if self.opts.static:
-                    print('Warning: duplicate IP {0}'.format(ip),
-                          file=sys.stderr)
-            else:
+            if ip not in hostvars:
                 hostvars[ip] = {
                     'omd_name': host['name'],
                     'omd_alias': host['alias'],
                 }
+            #else:
+            #    # duplicate IP
+            #    pass
         self.inventory = inventory
         self.inventory['_meta'] = {
             'hostvars': hostvars
@@ -207,19 +168,69 @@ class OMDLivestatusInventory(object):
             'hostvars': hostvars
         }
 
-    def print_static_inventory(self):
-        """Print out data in a format that can be used as a static inventory.
+    def list(self, indent=None, sort_keys=False):
+        """Return full inventory data as JSON."""
+        return json.dumps(self.inventory, indent=indent, sort_keys=sort_keys)
 
-        """
+    def host(self, name, indent=None, sort_keys=False):
+        """Return hostvars for a single host as JSON."""
+        if name in self.inventory['_meta']['hostvars']:
+            return(json.dumps(
+                self.inventory['_meta']['hostvars'][name],
+                indent=indent,
+                sort_keys=sort_keys
+            ))
+        else:
+            return("{}")
+
+    def static(self):
+        """Return data in static inventory format."""
+        out = []
         for group in [k for k in self.inventory.keys() if k != '_meta']:
-            print('\n[{0}]'.format(group))
+            out.append('\n[{0}]'.format(group))
             for host in self.inventory[group]:
                 vars = self.inventory['_meta']['hostvars'][host]
                 hostvars = []
                 for varname in vars.keys():
                     hostvars.append('{0}="{1}"'.format(varname, vars[varname]))
-                print('{0}\t{1}'.format(host, ' '.join(hostvars)))
+                out.append('{0}\t{1}'.format(host, ' '.join(hostvars)))
+        return '\n'.join(out)
+
+
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = optparse.OptionParser()
+    parser.add_option(
+        '--list', action='store_true', dest='list', default=False,
+        help='Return full Ansible inventory as JSON (default action).')
+    parser.add_option(
+        '--host', type='string', dest='host', default=None,
+        help='Return Ansible hostvars as JSON.')
+    parser.add_option(
+        '--socket', type='string', dest='socket', default=None,
+        help='Set path to Livestatus socket.')
+    parser.add_option(
+        '--by-ip', action='store_true', dest='by_ip', default=False,
+        help='Create inventory by IP (instead of the default by name).')
+    parser.add_option(
+        '--static', action='store_true', dest='static', default=False,
+        help='Print inventory in static file format to stdout.')
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
-    OMDLivestatusInventory()
+    opts, args = parse_arguments()
+    # Make `list` the default action.
+    if not opts.host:
+        opts.list = True
+    inv = OMDLivestatusInventory(opts.socket, by_ip=opts.by_ip)
+
+    if opts.static:
+        print(inv.static())
+    elif opts.list:
+        print(inv.list(indent=4, sort_keys=True))
+    elif opts.host:
+        print(inv.host(opts.host, indent=4, sort_keys=True))
+    else:
+        print('Missing command.')
+        sys.exit(1)
