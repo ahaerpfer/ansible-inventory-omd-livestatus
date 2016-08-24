@@ -32,6 +32,7 @@ import os
 import sys
 import optparse                         # Legacy ... 2.6 still out there
 import socket
+import subprocess
 
 try:
     import json
@@ -46,6 +47,12 @@ except AttributeError:
 
 class OMDLivestatusInventory(object):
 
+    #: default socket path
+    _def_socket_path = '/tmp/run/live'
+
+    #: Livestatus query string
+    _def_host_query = 'GET hosts\nColumns: address name alias groups\n'
+
     #: string of bad characters in host or group names
     _bad_chars = '.,;:[] '
 
@@ -55,19 +62,17 @@ class OMDLivestatusInventory(object):
     #: translation table for sanitizing group names
     _trans_table = maketrans(_bad_chars, _replacement_char * len(_bad_chars))
 
-    # For Python 3 alternatively:
-    #_trans_table = dict(zip(map(ord, _bad_chars),
-    #                        _replacement_char * len(_bad_chars)))
-
     def __init__(self, location=None, method='socket', by_ip=False):
         self.data = {}
         self.inventory = {}
+        self.method = method
 
         if not location:
             if 'OMD_LIVESTATUS_SOCKET' in os.environ:
                 self.location = os.environ['OMD_LIVESTATUS_SOCKET']
             elif 'OMD_ROOT' in os.environ:
-                self.location = os.environ['OMD_ROOT'] + '/tmp/run/live'
+                self.location = (os.environ['OMD_ROOT']
+                                 + OMDLivestatusInventory._def_socket_path)
             else:
                 raise EnvironmentError(
                     'Unable to determine location of Livestatus socket.')
@@ -87,11 +92,10 @@ class OMDLivestatusInventory(object):
 
         """
         self.data['hosts'] = []
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.connect(self.location)
-        s.send('GET hosts\nColumns: address name alias groups\n')
-        s.shutdown(socket.SHUT_WR)
-        answer = s.recv(100000000)
+        if self.method == 'ssh':
+            answer = self._read_from_ssh()
+        else:
+            answer = self._read_from_socket()
         for line in answer.splitlines():
             fields = line.split(';')
             groups = [f.strip() for f in fields[3].split(',') if f]
@@ -101,6 +105,29 @@ class OMDLivestatusInventory(object):
                 'alias': fields[2],
                 'groups': groups,
             })
+
+    def _read_from_socket(self):
+        """Read data from local Livestatus socket."""
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.connect(self.location)
+        s.send(OMDLivestatusInventory._def_host_query)
+        s.shutdown(socket.SHUT_WR)
+        return s.recv(100000000)
+
+    def _read_from_ssh(self):
+        """Read data from remote Livestatus socket via SSH."""
+        cmd = ['ssh', self.location,
+               '-o', 'BatchMode=yes',
+               '-o', 'ConnectTimeout=10',
+               'unixcat ./tmp/run/live']
+        p = subprocess.Popen(cmd,
+                             stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+        out, err = p.communicate(input=OMDLivestatusInventory._def_host_query)
+        if p.returncode:
+            raise RuntimeError(err)
+        return out
 
     def build_inventory_by_ip(self):
         """Create Ansible inventory by IP address instead of by name.
@@ -197,9 +224,16 @@ class OMDLivestatusInventory(object):
         return '\n'.join(out)
 
 
+def _save_method(option, opt_str, value, parser):
+    parser.values.method = opt_str.lstrip('-')
+    parser.values.location = value
+
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = optparse.OptionParser(version='%prog {0}'.format(__version__))
+    parser.set_defaults(method='socket')
+
     output_group = optparse.OptionGroup(parser, 'Output formats')
     output_group.add_option(
         '--list', action='store_true', dest='list', default=False,
@@ -217,22 +251,33 @@ def parse_arguments():
 
     connect_group = optparse.OptionGroup(parser, 'Connection options')
     connect_group.add_option(
-        '--socket', type='string', dest='socket', default=None,
+        '--socket', type='string', dest='location', default=None,
+        action='callback', callback=_save_method,
         help=('Set path to Livestatus socket.  If omitted, try to use '
               '$OMD_LIVESTATUS_SOCKET or $OMD_ROOT/tmp/run/live.'
         ))
+    connect_group.add_option(
+        '--ssh', type='string', dest='location', default=None,
+        action='callback', callback=_save_method,
+        help=('Connect to Livestatus socket via SSH.  LOCATION has the '
+              'form [user@]host[:path], the default path is ./tmp/run/live.'
+        ))
     parser.add_option_group(connect_group)
 
-    return parser.parse_args()
-
-
-if __name__ == '__main__':
-    opts, args = parse_arguments()
+    opts, args = parser.parse_args()
     # Make `list` the default action.
     if not opts.host:
         opts.list = True
-    inv = OMDLivestatusInventory(opts.socket, by_ip=opts.by_ip)
+    return opts, args
 
+if __name__ == '__main__':
+    opts, args = parse_arguments()
+    print(opts)
+#    sys.exit(0)
+
+    inv = OMDLivestatusInventory(opts.location,
+                                 method=opts.method,
+                                 by_ip=opts.by_ip)
     if opts.static:
         print(inv.static())
     elif opts.list:
