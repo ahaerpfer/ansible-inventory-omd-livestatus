@@ -115,11 +115,20 @@ class OMDLivestatusInventory(object):
         return s.recv(100000000)
 
     def _read_from_ssh(self):
-        """Read data from remote Livestatus socket via SSH."""
-        cmd = ['ssh', self.location,
+        """Read data from remote Livestatus socket via SSH.
+
+        Assumes non-interactive (e.g. via ssh-agent) access to the
+        remote host.  The `unixcat` command (part of Livestatus) has to
+        be available via $PATH at the remote end.
+
+        """
+        l = self.location.split(':', 1)
+        l.append('.' + OMDLivestatusInventory._def_socket_path)
+        host, path = l[0], l[1]
+        cmd = ['ssh', host,
                '-o', 'BatchMode=yes',
                '-o', 'ConnectTimeout=10',
-               'unixcat ./tmp/run/live']
+               'unixcat {0}'.format(path)]
         p = subprocess.Popen(cmd,
                              stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE,
@@ -272,9 +281,6 @@ def parse_arguments():
 
 if __name__ == '__main__':
     opts, args = parse_arguments()
-    print(opts)
-#    sys.exit(0)
-
     inv = OMDLivestatusInventory(opts.location,
                                  method=opts.method,
                                  by_ip=opts.by_ip)
