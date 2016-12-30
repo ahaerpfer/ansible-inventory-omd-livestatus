@@ -54,7 +54,7 @@ class OMDLivestatusInventory(object):
     _def_host_query = 'GET hosts\nColumns: address name alias groups\n'
 
     #: string of bad characters in host or group names
-    _bad_chars = '.,;:[] '
+    _bad_chars = '.,;:[]/ '
 
     #: replacement char for bad chars
     _replacement_char = '_'
