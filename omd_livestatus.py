@@ -51,21 +51,34 @@ class OMDLivestatusInventory(object):
     _def_socket_path = '/tmp/run/live'
 
     #: Livestatus query string
-    _def_host_query = 'GET hosts\nColumns: address name alias groups\n'
+    _def_host_query = (u'GET hosts\n'
+        'Columns: address name alias groups\n'
+        'OutputFormat: json\n')
 
     #: string of bad characters in host or group names
-    _bad_chars = '.,;:[]/ '
+    _bad_chars = u'.,;:[]/ '
 
     #: replacement char for bad chars
-    _replacement_char = '_'
-
-    #: translation table for sanitizing group names
-    _trans_table = maketrans(_bad_chars, _replacement_char * len(_bad_chars))
+    _replacement_char = u'_'
 
     def __init__(self, location=None, method='socket', by_ip=False):
         self.data = {}
         self.inventory = {}
         self.method = method
+
+        #: translation table for sanitizing group names
+        #
+        # See the following to find out why this can't be a class variable:
+        # http://stackoverflow.com/questions/13905741/accessing-class-variables-from-a-list-comprehension-in-the-class-definition
+
+        # This version only works for byte strings but not for unicode :-(
+        #self._trans_table = maketrans(
+        #    self._bad_chars, self._replacement_char * len(_bad_chars))
+
+        # Unicode version; see also:
+        # http://stackoverflow.com/questions/1324067/how-do-i-get-str-translate-to-work-with-unicode-strings
+        self._trans_table = dict((ord(char), self._replacement_char)
+                                 for char in self._bad_chars)
 
         if not location:
             if 'OMD_LIVESTATUS_SOCKET' in os.environ:
@@ -93,18 +106,14 @@ class OMDLivestatusInventory(object):
         """
         self.data['hosts'] = []
         if self.method == 'ssh':
-            answer = self._read_from_ssh()
+            answer = json.loads(self._read_from_ssh())
         else:
-            answer = self._read_from_socket()
-        for line in answer.splitlines():
-            fields = line.split(';')
-            groups = [f.strip() for f in fields[3].split(',') if f]
-            self.data['hosts'].append({
-                'ip': fields[0],
-                'name': fields[1],
-                'alias': fields[2],
-                'groups': groups,
-            })
+            answer = json.loads(self._read_from_socket())
+
+        for host in answer:
+            self.data['hosts'].append(
+                dict(zip((u'ip', u'name', u'alias', u'groups'),
+                         host)))
 
     def _read_from_socket(self):
         """Read data from local Livestatus socket."""
