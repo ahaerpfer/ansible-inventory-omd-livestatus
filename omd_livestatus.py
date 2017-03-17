@@ -52,7 +52,7 @@ class OMDLivestatusInventory(object):
 
     #: Livestatus query string
     _def_host_query = (u'GET hosts\n'
-        'Columns: address name alias groups\n'
+        'Columns: address name alias groups host_custom_variables\n'
         'OutputFormat: json\n')
 
     #: string of bad characters in host or group names
@@ -112,7 +112,7 @@ class OMDLivestatusInventory(object):
 
         for host in answer:
             self.data['hosts'].append(
-                dict(zip((u'ip', u'name', u'alias', u'groups'),
+                dict(zip((u'ip', u'name', u'alias', u'groups', u'custom_vars'),
                          host)))
 
     def _read_from_socket(self):
@@ -165,7 +165,7 @@ class OMDLivestatusInventory(object):
         inventory = {}
         hostvars = {}
         for host in self.data['hosts']:
-            for group in host['groups'] or ['_NOGROUP']:
+            for group in host['groups'] or [u'_NOGROUP']:
                 sanitized_group = group.translate(self._trans_table)
                 if sanitized_group in inventory:
                     inventory[sanitized_group].append(host['ip'])
@@ -178,6 +178,7 @@ class OMDLivestatusInventory(object):
                 hostvars[ip] = {
                     'omd_name': host['name'],
                     'omd_alias': host['alias'],
+                    'omd_custom_vars': host['custom_vars'],
                 }
             #else:
             #    # duplicate IP
@@ -198,7 +199,7 @@ class OMDLivestatusInventory(object):
         inventory = {}
         hostvars = {}
         for host in self.data['hosts']:
-            for group in host['groups'] or ['_NOGROUP']:
+            for group in host['groups'] or [u'_NOGROUP']:
                 sanitized_group = group.translate(self._trans_table)
                 if sanitized_group in inventory:
                     inventory[sanitized_group].append(host['name'])
@@ -207,6 +208,7 @@ class OMDLivestatusInventory(object):
             hostvars[host['name']] = {
                 'ansible_host': host['ip'],
                 'omd_alias': host['alias'],
+                'omd_custom_vars': host['custom_vars'],
             }
         self.inventory = inventory
         self.inventory['_meta'] = {
