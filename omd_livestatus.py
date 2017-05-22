@@ -28,6 +28,7 @@ from __future__ import print_function
 
 __version__ = '0.2'
 
+import datetime
 import os
 import sys
 import optparse                         # Legacy ... 2.6 still out there
@@ -234,6 +235,7 @@ class OMDLivestatusInventory(object):
     def static(self):
         """Return data in static inventory format."""
         out = []
+        out.append('# File created: {}'.format(datetime.datetime.now()))
         for group in [k for k in self.inventory.keys() if k != '_meta']:
             out.append('\n[{0}]'.format(group))
             for host in self.inventory[group]:
