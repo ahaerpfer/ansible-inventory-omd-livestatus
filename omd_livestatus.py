@@ -48,7 +48,7 @@ except AttributeError:
 class OMDLivestatusInventory(object):
 
     #: default socket path
-    _def_socket_path = '/tmp/run/live'
+    _def_socket_path = u'/tmp/run/live'
 
     #: Livestatus query string
     _def_host_query = (u'GET hosts\n'
@@ -119,9 +119,9 @@ class OMDLivestatusInventory(object):
         """Read data from local Livestatus socket."""
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.connect(self.location)
-        s.send(OMDLivestatusInventory._def_host_query)
+        s.send(OMDLivestatusInventory._def_host_query.encode('utf-8'))
         s.shutdown(socket.SHUT_WR)
-        return s.recv(100000000)
+        return s.recv(100000000).decode('utf-8')
 
     def _read_from_ssh(self):
         """Read data from remote Livestatus socket via SSH.
@@ -142,10 +142,11 @@ class OMDLivestatusInventory(object):
                              stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE)
-        out, err = p.communicate(input=OMDLivestatusInventory._def_host_query)
+        out, err = p.communicate(
+            input=OMDLivestatusInventory._def_host_query.encode('utf-8'))
         if p.returncode:
             raise RuntimeError(err)
-        return out
+        return out.decode('utf-8')
 
     def build_inventory_by_ip(self):
         """Create Ansible inventory by IP address instead of by name.
