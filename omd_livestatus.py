@@ -22,6 +22,7 @@ Inspired by the DigitalOcean inventory script:
 https://github.com/ansible/ansible/blob/devel/contrib/inventory/digital_ocean.py
 
 :author: Andreas Härpfer <andreas.haerpfer@consol.de>
+:updated by: Samuel López @elchicodepython
 """
 
 from __future__ import print_function
@@ -89,7 +90,9 @@ class OMDLivestatusInventory(object):
                                  + OMDLivestatusInventory._def_socket_path)
             else:
                 raise EnvironmentError(
-                    'Unable to determine location of Livestatus socket.')
+                    'Unable to determine location of Livestatus socket. '
+                    'Try setting OMD_LIVESTATUS_SOCKET environment variable.'
+                    )
         else:
             self.location = location
 
@@ -118,11 +121,33 @@ class OMDLivestatusInventory(object):
 
     def _read_from_socket(self):
         """Read data from local Livestatus socket."""
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.connect(self.location)
-        s.send(OMDLivestatusInventory._def_host_query.encode('utf-8'))
+
+        if ':' in self.location:
+            s = self._get_tcp_socket()
+        else:
+            s = self._get_unix_socket()
+
+        s.send(self._def_host_query.encode('utf-8'))
         s.shutdown(socket.SHUT_WR)
-        return s.recv(100000000).decode('utf-8')
+
+        chunks = []
+        while len(chunks) == 0 or chunks[-1] != "":
+            chunks.append(s.recv(4096))
+        s.close()
+        reply = "".join(chunks)
+
+        return reply
+
+    def _get_unix_socket(self):
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.connect(location)
+        return s
+
+    def _get_tcp_socket(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        address, port = self.location.split(':')
+        s.connect((address, int(port)))
+        return s
 
     def _read_from_ssh(self):
         """Read data from remote Livestatus socket via SSH.
